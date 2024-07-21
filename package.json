@@ -10,7 +10,9 @@
     "build": "npx tsc",
     "test": "jest"
   },
-  "dependencies": {},
+  "dependencies": {
+    "reflect-metadata": "^0.2.2"
+  },
   "devDependencies": {
     "@types/jest": "^29.5.12",
     "@types/node": "^20.14.2",
