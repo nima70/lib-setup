@@ -15,7 +15,7 @@ name: Publish to CodeArtifact
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   publish:
