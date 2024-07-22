@@ -1,24 +1,12 @@
-# This GitHub Actions workflow automates the process of publishing npm packages to AWS CodeArtifact.
-# It requires the following environment variables to be set as GitHub Secrets:
-#
-# 1. AWS_ACCESS_KEY_ID: Your AWS access key ID.
-# 2. AWS_SECRET_ACCESS_KEY: Your AWS secret access key.
-# 3. CODEARTIFACT_DOMAIN: Your CodeArtifact domain name.
-# 4. CODEARTIFACT_DOMAIN_OWNER: Your AWS account ID.
-# 5. CODEARTIFACT_REPOSITORY: The CodeArtifact repository name.
-# 6. AWS_REGION: The AWS region where your CodeArtifact domain is located.
-#
-# Ensure these secrets are added to your GitHub repository under Settings > Secrets > Actions.
-
 name: Publish to CodeArtifact
 
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
 
     env:
@@ -28,42 +16,44 @@ jobs:
       AWS_REGION: ${{ secrets.AWS_REGION }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+    - name: Checkout repository
+      uses: actions/checkout@v2
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "20.14.0" # Specify the Node.js version you want to use
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20.14.0'
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
 
-      - name: Get CodeArtifact auth token
-        id: auth
-        run: |
-          export CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token --domain $CODEARTIFACT_DOMAIN --domain-owner $CODEARTIFACT_DOMAIN_OWNER --query authorizationToken --output text)
-          echo "::set-output name=token::$CODEARTIFACT_AUTH_TOKEN"
+    - name: Get CodeArtifact auth token
+      id: auth
+      run: |
+        CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token --domain $CODEARTIFACT_DOMAIN --domain-owner $CODEARTIFACT_DOMAIN_OWNER --query authorizationToken --output text)
+        echo "::set-output name=token::$CODEARTIFACT_AUTH_TOKEN"
 
-      - name: Configure npm to use CodeArtifact
-        run: |
-          echo "registry=https://${CODEARTIFACT_DOMAIN}-${CODEARTIFACT_DOMAIN_OWNER}.d.codeartifact.${AWS_REGION}.amazonaws.com/npm/${CODEARTIFACT_REPOSITORY}/" > ~/.npmrc
-          echo "//${CODEARTIFACT_DOMAIN}-${CODEARTIFACT_DOMAIN_OWNER}.d.codeartifact.${AWS_REGION}.amazonaws.com/npm/${CODEARTIFACT_REPOSITORY}/:always-auth=true" >> ~/.npmrc
-          echo "//${CODEARTIFACT_DOMAIN}-${CODEARTIFACT_DOMAIN_OWNER}.d.codeartifact.${AWS_REGION}.amazonaws.com/npm/${CODEARTIFACT_REPOSITORY}/:_authToken=${{ steps.auth.outputs.token }}" >> ~/.npmrc
+    - name: Create custom .npmrc file
+      run: |
+        echo "registry=https://registry.npmjs.org/" > .npmrc
+        echo "@lib.setup:registry=https://${CODEARTIFACT_DOMAIN}-${CODEARTIFACT_DOMAIN_OWNER}.d.codeartifact.${AWS_REGION}.amazonaws.com/npm/${CODEARTIFACT_REPOSITORY}/" >> .npmrc
+        echo "//${CODEARTIFACT_DOMAIN}-${CODEARTIFACT_DOMAIN_OWNER}.d.codeartifact.${AWS_REGION}.amazonaws.com/npm/${CODEARTIFACT_REPOSITORY}/:always-auth=true" >> .npmrc
+        echo "//${CODEARTIFACT_DOMAIN}-${CODEARTIFACT_DOMAIN_OWNER}.d.codeartifact.${AWS_REGION}.amazonaws.com/npm/${CODEARTIFACT_REPOSITORY}/:_authToken=${{ steps.auth.outputs.token }}" >> .npmrc
+        cat .npmrc # Debugging line to check .npmrc
 
-      - name: Install dependencies
-        run: npm install
+    - name: Install dependencies using custom .npmrc
+      run: npm install --userconfig .npmrc
 
-      - name: Run tests
-        run: npm test
+    - name: Run tests
+      run: npm test --userconfig .npmrc
 
-      - name: Build the project
-        run: npm run build # Adjust if you have a different build script
+    - name: Build the project
+      run: npm run build --userconfig .npmrc
 
-      - name: Publish to CodeArtifact
-        if: success()
-        run: npm publish --registry https://${CODEARTIFACT_DOMAIN}-${CODEARTIFACT_DOMAIN_OWNER}.d.codeartifact.${AWS_REGION}.amazonaws.com/npm/${CODEARTIFACT_REPOSITORY}/
+    - name: Publish to CodeArtifact
+      if: success()
+      run: npm publish --registry https://${CODEARTIFACT_DOMAIN}-${CODEARTIFACT_DOMAIN_OWNER}.d.codeartifact.${AWS_REGION}.amazonaws.com/npm/${CODEARTIFACT_REPOSITORY}/ --userconfig .npmrc
